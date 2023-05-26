@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:english_words/english_words.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -19,6 +20,10 @@ class MyApp extends StatelessWidget {
         theme: ThemeData(
           useMaterial3: true,
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.lightBlue),
+          scrollbarTheme: ScrollbarThemeData(
+            trackVisibility: MaterialStateProperty.resolveWith((states) => true),
+            thumbVisibility: MaterialStateProperty.resolveWith((states) => true),
+          )
         ),
         home: MyHomePage()
       ),
@@ -43,11 +48,35 @@ class MyAppState extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  void removeFavorite(pair) {
+    favorites.remove(pair);
+    notifyListeners();
+  }
 }
 
-class MyHomePage extends StatelessWidget {
+class MyHomePage extends StatefulWidget {
+  @override
+  State<MyHomePage> createState() => _MyHomePageState();
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+  var selectedIndex = 0;
+
   @override
   Widget build(BuildContext context) {
+    Widget page;
+    switch (selectedIndex) {
+      case 0:
+        page = GeneratorPage();
+        break;
+      case 1:
+        page = FavoritesPage();
+        break;
+      default:
+        throw UnimplementedError('no widget for $selectedIndex');
+    }
+
     return Scaffold(
       body: Row(
         children: [
@@ -64,16 +93,18 @@ class MyHomePage extends StatelessWidget {
                   label: Text('Favorites'),
                 ),
               ],
-              selectedIndex: 0,
+              selectedIndex: selectedIndex,
               onDestinationSelected: (value) {
-                print('selected: $value');
+                setState(() {
+                  selectedIndex = value;
+                });
               },
             ),
           ),
           Expanded(
             child: Container(
               color: Theme.of(context).colorScheme.primaryContainer,
-              child: GeneratorPage(),
+              child: page,
             ),
           ),
         ],
@@ -82,6 +113,49 @@ class MyHomePage extends StatelessWidget {
   }
 }
 
+class FavoritesPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    var appState = context.watch<MyAppState>();
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        double height = constraints.maxHeight;
+        double width = constraints.maxWidth;
+
+        double margin = min(height, width) * 0.10;
+
+        return Column(
+          children: [
+            SizedBox(height: height * 0.08),
+            Text(
+              'Saved Names:',
+              style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
+            ),
+            Padding(
+              padding: EdgeInsets.all(margin),
+              child: Container(
+                height: height * 0.65,
+                child: SingleChildScrollView(
+                  child: GridView.count(
+                    crossAxisCount: width ~/ 250,
+                    shrinkWrap: true,
+                    children: [
+                      for (var element in appState.favorites)
+                      FavoritesCard(
+                        pair: element
+                      )
+                    ]
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      }
+    );
+  }
+}
 
 class GeneratorPage extends StatelessWidget {
   @override
@@ -105,7 +179,10 @@ class GeneratorPage extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('A random name idea:'),
+              Text(
+                'A random name idea:',
+                style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
+              ),
               SizedBox(
                 height: height * 0.1,
               ),
@@ -121,23 +198,24 @@ class GeneratorPage extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   SizedBox(
-                    width: 100,
+                    width: 120,
                     height: 50,
-                    child: ElevatedButton(
-                      onPressed: () => {appState.getNext()}, 
-                      child: Text('Next')
+                    child: ElevatedButton.icon(
+                      onPressed: () => {appState.getNext()},
+                      icon: Icon(Icons.arrow_circle_right),
+                      label: Text('Next'),
                     ),
                   ),
                   SizedBox(
-                    width: width * 0.05
+                    width: width * 0.05,
                   ),
                   SizedBox(
-                    width: 100,
+                    width: 120,
                     height: 50,
                     child: ElevatedButton.icon(
                       onPressed: () => {appState.toggleFavorite()}, 
                       icon: Icon(icon),
-                      label: Text('Like')
+                      label: Text('Save'),
                     ),
                   ),
                 ],
@@ -180,6 +258,90 @@ class BigCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class FavoritesCard extends StatelessWidget {
+  const FavoritesCard({
+    super.key,
+    required this.pair,
+  });
+
+  final WordPair pair;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final style = theme.textTheme.displayMedium!.copyWith(
+      color: theme.colorScheme.onPrimary,
+      fontWeight: FontWeight.bold
+    );
+
+    var appState = context.watch<MyAppState>();
+
+    return Card(
+      color: theme.colorScheme.primary,
+      child: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Center(
+              child: AutoSizeText(
+                pair.asLowerCase,
+                style: style,
+                maxLines: 1,
+                minFontSize: 8,
+                semanticsLabel: "${pair.first} ${pair.second}",
+              ),
+            ),
+          ),
+          Positioned(
+            top: 8.0,
+            right: 8.0,
+            child: GestureDetector(
+              onTap: () {
+                showDialog(
+                  context: context,
+                  builder: (BuildContext context) {
+                    return AlertDialog(
+                      title: Text('Delete $pair?'),
+                      actions: [
+                        ElevatedButton(
+                          child: Text('Delete'),
+                          onPressed: () {
+                            appState.removeFavorite(pair);
+                            Navigator.of(context).pop();
+                          },
+                        ),
+                        ElevatedButton(
+                          child: Text('Cancel'),
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                          },
+                        ),
+                      ],
+                    );
+                  }
+                );
+              },
+              child: Container(
+                width: 32.0,
+                height: 32.0,
+                decoration: BoxDecoration(
+                  color: const Color.fromARGB(255, 121, 5, 5),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.delete_forever,
+                  color: Colors.white,
+                  size: 26.0,
+                ),
+              ),
+            ),
+          ),
+        ],
+      )
     );
   }
 }
